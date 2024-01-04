@@ -27,11 +27,30 @@ class RegisterCredentials {
 
 @Resolver(User)
 export class UserResolver {
-	@Query(() => String, { nullable: true })
-	async cookie(@Arg('name') name: string, @Ctx() ctx: YogaInitialContext) {
-		const cookie = await ctx.request.cookieStore?.get(name);
+	@Query(() => UserResponse)
+	async me(@Ctx() ctx: YogaInitialContext): Promise<UserResponse> {
+		const cookie = await ctx.request.cookieStore?.get('cid');
 
-		return cookie?.value;
+		if (!cookie) {
+			return {
+				errors: [{ field: 'cookie', message: 'You are not logged in' }],
+			};
+		}
+
+		const validToken = jwt.verify(cookie.value, process.env.JWT_SECRET!) as {
+			id: number;
+		};
+
+		if (!validToken) {
+			return { errors: [{ field: 'token', message: 'Your token is invalid' }] };
+		}
+
+		const user = await User.findOneBy({ id: validToken.id.toString() });
+
+		if (!user) {
+			return { errors: [{ field: 'user', message: 'User not found' }] };
+		}
+		return { user };
 	}
 
 	@Mutation(() => UserResponse)
