@@ -1,11 +1,15 @@
 import 'reflect-metadata';
 import 'dotenv/config';
 import { createServer } from 'node:http';
-import { createYoga } from 'graphql-yoga';
+import { YogaInitialContext, createYoga } from 'graphql-yoga';
 import { buildSchema } from 'type-graphql';
 import { UserResolver } from './resolvers/user';
 import { AppDataSource } from '../data-source';
 import { useCookies } from '@whatwg-node/server-plugin-cookies';
+
+export interface MyContext extends YogaInitialContext {
+	tokenPayload?: string;
+}
 
 async function main() {
 	try {

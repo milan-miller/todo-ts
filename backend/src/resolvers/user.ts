@@ -6,6 +6,7 @@ import {
 	Ctx,
 	InputType,
 	Field,
+	UseMiddleware,
 } from 'type-graphql';
 import { YogaInitialContext } from 'graphql-yoga';
 import { User } from '../entities/user';
@@ -14,6 +15,8 @@ import 'class-validator';
 import bcrypt from 'bcrypt';
 import { UserResponse } from '../types/user_types';
 import { validateCredentials } from '../utils/validate_credentials';
+import { isAuth } from '../middleware/is_auth';
+import { MyContext } from '..';
 
 @InputType()
 class RegisterCredentials {
@@ -28,35 +31,28 @@ class RegisterCredentials {
 @Resolver(User)
 export class UserResolver {
 	@Query(() => UserResponse)
-	async me(@Ctx() ctx: YogaInitialContext): Promise<UserResponse> {
-		const cookie = await ctx.request.cookieStore?.get('cid');
+	@UseMiddleware(isAuth)
+	async me(@Ctx() ctx: MyContext): Promise<UserResponse> {
+		try {
+			const user = await User.findOneBy({ id: ctx.tokenPayload });
 
-		if (!cookie) {
+			if (!user) {
+				return { errors: [{ field: 'user', message: 'User not found' }] };
+			}
+
+			return { user };
+		} catch (error) {
+			console.log(error);
 			return {
-				errors: [{ field: 'cookie', message: 'You are not logged in' }],
+				errors: [{ field: '500', message: 'Internal server error' }],
 			};
 		}
-
-		const validToken = jwt.verify(cookie.value, process.env.JWT_SECRET!) as {
-			id: number;
-		};
-
-		if (!validToken) {
-			return { errors: [{ field: 'token', message: 'Your token is invalid' }] };
-		}
-
-		const user = await User.findOneBy({ id: validToken.id.toString() });
-
-		if (!user) {
-			return { errors: [{ field: 'user', message: 'User not found' }] };
-		}
-		return { user };
 	}
 
 	@Mutation(() => UserResponse)
 	async register(
 		@Arg('credentials') credentials: RegisterCredentials,
-		@Ctx() ctx: YogaInitialContext
+		@Ctx() ctx: MyContext
 	): Promise<UserResponse> {
 		try {
 			const { username, email, password } = credentials;
