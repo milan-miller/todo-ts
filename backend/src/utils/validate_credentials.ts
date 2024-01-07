@@ -1,4 +1,4 @@
-import { FieldError } from '../types/user_types';
+import { FieldError } from '../types/object_types';
 import validator from 'email-validator';
 
 interface props {

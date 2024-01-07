@@ -4,29 +4,17 @@ import {
 	Mutation,
 	Arg,
 	Ctx,
-	InputType,
-	Field,
 	UseMiddleware,
 } from 'type-graphql';
-import { YogaInitialContext } from 'graphql-yoga';
 import { User } from '../entities/user';
 import jwt from 'jsonwebtoken';
 import 'class-validator';
 import bcrypt from 'bcrypt';
-import { UserResponse } from '../types/user_types';
+import { FieldError, UserResponse } from '../types/object_types';
 import { validateCredentials } from '../utils/validate_credentials';
 import { isAuth } from '../middleware/is_auth';
 import { MyContext } from '..';
-
-@InputType()
-class RegisterCredentials {
-	@Field()
-	username: string;
-	@Field()
-	email: string;
-	@Field()
-	password: string;
-}
+import { LoginCredentials, RegisterCredentials } from '../types/input_types';
 
 @Resolver(User)
 export class UserResolver {
@@ -39,6 +27,55 @@ export class UserResolver {
 			if (!user) {
 				return { errors: [{ field: 'user', message: 'User not found' }] };
 			}
+
+			return { user };
+		} catch (error) {
+			console.log(error);
+			return {
+				errors: [{ field: '500', message: 'Internal server error' }],
+			};
+		}
+	}
+
+	@Mutation(() => UserResponse)
+	async login(
+		@Arg('credentials') { email, password }: LoginCredentials,
+		@Ctx() ctx: MyContext
+	): Promise<UserResponse> {
+		try {
+			let errors: FieldError[] = [];
+
+			if (!email) {
+				errors.push({ field: 'email', message: 'Enter your email' });
+			}
+
+			if (!password) {
+				errors.push({ field: 'password', message: 'Enter your password' });
+			}
+
+			const user = (await User.findOneBy({ email })) as User;
+
+			if (!user || !(await bcrypt.compare(password, user.password))) {
+				errors.push({ field: 'user', message: 'Invalid credentials' });
+			}
+
+			if (errors.length > 0) {
+				return { errors };
+			}
+
+			const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
+				expiresIn: process.env.JWT_EXPIRATION,
+			});
+
+			await ctx.request.cookieStore?.set({
+				name: 'cid',
+				value: token,
+				expires: Date.now() + 24 * 60 * 60 * 1000,
+				httpOnly: true,
+				domain: 'localhost',
+				secure: true,
+				sameSite: 'none',
+			});
 
 			return { user };
 		} catch (error) {
